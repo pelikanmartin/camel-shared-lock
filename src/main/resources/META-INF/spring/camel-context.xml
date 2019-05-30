@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:camel="http://camel.apache.org/schema/spring" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+    http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring-2.23.2.xsd">
+
+
+    <!-- Import file containing the CXF RS client -->
+    <bean id="fileLock" class="eu.mpelikan.camel.spring.file.SharedFileLock" destroy-method="destroy">
+        <constructor-arg value="lock-folder"/>
+    </bean>
+    <bean id="fileLock2" class="eu.mpelikan.camel.spring.file.SharedFileLock" destroy-method="destroy">
+        <constructor-arg value="lock-folder"/>
+    </bean>
+
+    <bean id="shutdownProcessor" class="eu.mpelikan.camel.spring.processor.StartStopProcessor"/>
+
+    <camelContext trace="false"
+                  xmlns="http://camel.apache.org/schema/spring">
+
+        <camel:route id="first-service-route">
+            <camel:from uri="scheduler:myscheduler?delay=5s"/>
+            <camel:setProperty propertyName="routeId">
+                <camel:constant>first-route</camel:constant>
+            </camel:setProperty>
+            <camel:choice>
+                <camel:when>
+                    <camel:simple>${bean:fileLock?method=hasLock} == 'true'</camel:simple>
+                    <camel:setProperty propertyName="startRoute">
+                        <camel:constant>true</camel:constant>
+                    </camel:setProperty>
+                    <camel:process ref="shutdownProcessor"/>
+                </camel:when>
+                <camel:otherwise>
+                    <camel:setProperty propertyName="startRoute">
+                        <camel:constant>false</camel:constant>
+                    </camel:setProperty>
+                    <camel:process ref="shutdownProcessor" />
+                </camel:otherwise>
+            </camel:choice>
+            <camel:to uri="bean:fileLock?method=isAlive"/>
+        </camel:route>
+
+        <camel:route id="second-service-route">
+            <camel:from uri="scheduler:myscheduler2?delay=5s"/>
+            <camel:setProperty propertyName="routeId">
+                <camel:constant>second-route</camel:constant>
+            </camel:setProperty>
+            <camel:choice>
+                <camel:when>
+                    <camel:simple>${bean:fileLock2?method=hasLock} == 'true'</camel:simple>
+                    <camel:setProperty propertyName="startRoute">
+                        <camel:constant>true</camel:constant>
+                    </camel:setProperty>
+                    <camel:process ref="shutdownProcessor"/>
+                </camel:when>
+                <camel:otherwise>
+                    <camel:setProperty propertyName="startRoute">
+                        <camel:constant>false</camel:constant>
+                    </camel:setProperty>
+                    <camel:process ref="shutdownProcessor" />
+                </camel:otherwise>
+            </camel:choice>
+            <camel:to uri="bean:fileLock2?method=isAlive"/>
+        </camel:route>
+
+        <camel:route id="print-route-status">
+            <camel:from uri="scheduler:myscheduler2?delay=2s"/>
+            <camel:to uri="bean:shutdownProcessor?method=printRoutesStatus"/>
+        </camel:route>
+
+        <camel:route id="first-route" autoStartup="false">
+            <camel:from uri="direct:first-route" />
+            <camel:log
+                    message="aa"/>
+        </camel:route>
+
+        <camel:route id="second-route" autoStartup="false">
+            <camel:from uri="direct:second-route" />
+            <camel:log
+                    message="bb"/>
+        </camel:route>
+    </camelContext>
+
+</beans>
+
+
